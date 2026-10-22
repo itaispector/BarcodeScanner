@@ -209,7 +209,9 @@ public final class CameraViewController: UIViewController {
       }
 
       DispatchQueue.main.async { [weak self] in
-        self?.settingsButton.isHidden = error == nil
+        // Per App Store Review Guideline 5.1.1(iv), we should not show
+        // the Settings button immediately after the user denies permission.
+        self?.settingsButton.isHidden = true
       }
 
       if error == nil {
