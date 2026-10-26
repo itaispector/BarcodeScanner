@@ -182,6 +182,18 @@ public final class CameraViewController: UIViewController {
   @objc private func appWillEnterForeground() {
     torchMode = .off
     animateFocusView()
+    
+    // Check if camera permission status has changed while in background
+    let authStatus = AVCaptureDevice.authorizationStatus(for: .video)
+    if authStatus == .authorized {
+      // User granted permission in Settings, restart capture
+      if !captureSession.isRunning {
+        delegate?.cameraViewControllerDidSetupCaptureSession(self)
+      }
+    } else if authStatus == .denied {
+      // Only show settings button when returning from background with denied permission
+      settingsButton.isHidden = false
+    }
   }
 
   /// Opens setting to allow camera usage.
@@ -208,18 +220,27 @@ public final class CameraViewController: UIViewController {
         return
       }
 
-      DispatchQueue.main.async { [weak self] in
-        // Per App Store Review Guideline 5.1.1(iv), we should not show
-        // the Settings button immediately after the user denies permission.
-        self?.settingsButton.isHidden = true
-      }
-
       if error == nil {
+        DispatchQueue.main.async { [weak self] in
+          self?.settingsButton.isHidden = true
+        }
         strongSelf.setupSessionInput(for: .back)
         strongSelf.setupSessionOutput()
         strongSelf.delegate?.cameraViewControllerDidSetupCaptureSession(strongSelf)
       } else {
-        strongSelf.delegate?.cameraViewControllerDidFailToSetupCaptureSession(strongSelf)
+        // Per App Store Review Guideline 5.1.1(iv), we must respect the user's
+        // initial permission decision. Only show settings UI when returning from
+        // background if permission was previously denied.
+        let authStatus = AVCaptureDevice.authorizationStatus(for: .video)
+        DispatchQueue.main.async { [weak self] in
+          // Only show settings button if the user explicitly denied (not on first prompt)
+          self?.settingsButton.isHidden = (authStatus == .notDetermined)
+        }
+        
+        // Only report failure if permission was explicitly denied, not on first prompt
+        if authStatus == .denied || authStatus == .restricted {
+          strongSelf.delegate?.cameraViewControllerDidFailToSetupCaptureSession(strongSelf)
+        }
       }
     }
   }
