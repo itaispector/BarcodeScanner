@@ -5,6 +5,7 @@ import AVFoundation
 protocol CameraViewControllerDelegate: class {
   func cameraViewControllerDidSetupCaptureSession(_ controller: CameraViewController)
   func cameraViewControllerDidFailToSetupCaptureSession(_ controller: CameraViewController)
+  func cameraViewControllerDidDeclineCameraAccess(_ controller: CameraViewController)
   func cameraViewController(_ controller: CameraViewController, didReceiveError error: Error)
   func cameraViewControllerDidTapSettingsButton(_ controller: CameraViewController)
   func cameraViewController(
@@ -215,6 +216,10 @@ public final class CameraViewController: UIViewController {
 
   /// Sets up camera and checks for camera permissions.
   private func setupCamera() {
+    // The status must be read before asking: once the user answers the system
+    // prompt it is already `.denied`, so it can't identify a fresh decision later.
+    let isPromptingUser = AVCaptureDevice.authorizationStatus(for: .video) == .notDetermined
+
     permissionService.checkPersmission { [weak self] error in
       guard let strongSelf = self else {
         return
@@ -227,20 +232,18 @@ public final class CameraViewController: UIViewController {
         strongSelf.setupSessionInput(for: .back)
         strongSelf.setupSessionOutput()
         strongSelf.delegate?.cameraViewControllerDidSetupCaptureSession(strongSelf)
+      } else if isPromptingUser {
+        // Per App Store Review Guideline 5.1.1(iv), the user's answer to the
+        // system prompt is final: show nothing that asks them to reconsider.
+        strongSelf.delegate?.cameraViewControllerDidDeclineCameraAccess(strongSelf)
       } else {
-        // Per App Store Review Guideline 5.1.1(iv), we must respect the user's
-        // initial permission decision. Only show settings UI when returning from
-        // background if permission was previously denied.
+        // The user came back to the feature with access already off. Settings
+        // can't lift a `.restricted` status, so only link to it for `.denied`.
         let authStatus = AVCaptureDevice.authorizationStatus(for: .video)
         DispatchQueue.main.async { [weak self] in
-          // Only show settings button if the user explicitly denied (not on first prompt)
-          self?.settingsButton.isHidden = (authStatus == .notDetermined)
+          self?.settingsButton.isHidden = authStatus != .denied
         }
-        
-        // Only report failure if permission was explicitly denied, not on first prompt
-        if authStatus == .denied || authStatus == .restricted {
-          strongSelf.delegate?.cameraViewControllerDidFailToSetupCaptureSession(strongSelf)
-        }
+        strongSelf.delegate?.cameraViewControllerDidFailToSetupCaptureSession(strongSelf)
       }
     }
   }

@@ -292,19 +292,13 @@ extension BarcodeScannerViewController: CameraViewControllerDelegate {
   }
 
   func cameraViewControllerDidFailToSetupCaptureSession(_ controller: CameraViewController) {
-    // Per App Store Review Guideline 5.1.1(iv), we must respect the user's
-    // decision to deny camera access. Only show unauthorized state when
-    // the user returns to the feature after having previously denied it,
-    // not immediately after the first denial.
-    let authStatus = AVCaptureDevice.authorizationStatus(for: .video)
-    if authStatus == .denied || authStatus == .restricted {
-      // User has explicitly denied permission previously
-      status = Status(state: .unauthorized)
-    } else {
-      // User just denied for the first time - respect their decision by dismissing
-      dismissalDelegate?.scannerDidDismiss(self)
-    }
+    status = Status(state: .unauthorized)
   }
+
+  func cameraViewControllerDidDeclineCameraAccess(_ controller: CameraViewController) {
+    dismissalDelegate?.scannerDidDismiss(self)
+  }
+
   func cameraViewController(_ controller: CameraViewController, didReceiveError error: Error) {
     errorDelegate?.scanner(self, didReceiveError: error)
   }
